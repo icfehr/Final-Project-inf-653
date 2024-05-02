@@ -57,38 +57,6 @@ app.all('*', (req, res) => {
 });
 
 
-// post request to add fun facts to a state
-app.post('/states/:state/funfact', async (req, res) => {
-    try {
-        const stateCode = req.params.state;
-        const funFacts = req.body.funfacts;
-
-      // Verify if funfacts property exists and is an array
-        if (!funFacts || !Array.isArray(funFacts)) {
-        return res.status(400).json({ error: 'Invalid funfacts data' });
-    }
-
-    // Find the state in the MongoDB collection
-        const state = await State.findOne({ stateCode });
-
-        if (state) {
-        // State already exists, add the new fun facts to the existing ones
-        state.funfacts.push(...funFacts);
-    } else {
-        // State doesn't exist, create a new record
-        const newState = new State({
-        stateCode,
-        funfacts: funFacts,
-        });
-        await newState.save();
-    }
-
-    return res.json({ message: 'Fun facts added successfully' });
-    } catch (error) {
-    console.error('Error processing POST request:', error);
-    return res.status(500).json({ error: 'Internal server error' });
-    }
-});
 
 
 // Error handler
