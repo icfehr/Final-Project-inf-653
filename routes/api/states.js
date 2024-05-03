@@ -3,30 +3,37 @@ const router = express.Router();   // Import the express router
 const State = require('../../models/States'); // Import the State model
 
 //get all states
-router.get('/',async (req, res) => {
+router.get('/states', async (req, res) => {
     try {
-        const states = await State.find();
-        res.json(states);
+        const contig = req.query.contig;
+        let states;
+        if (contig === 'true') {
+            states = await State.find({state: {$nin: ['Alaska', 'Hawaii']}});
+        } else if (contig === 'false') {
+            states = await State.find({state: {$in: ['Alaska', 'Hawaii']}});
+        } else {
+            states = await State.find({});
+        }
+        return res.json(states);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        console.error(err);
+        return res.status(500).json({ error: 'Server error' });
     }
 });
 
 
 
 //get one state
-router.get('/:state', async (req, res) => {
+router.get('/states', async (req, res) => {
     try {
-        const stateName = req.params.state;
-        const state = await State.findOne({ state: stateName });
+        // Find all state records in your MongoDB collection
+        const states = await State.find({});
 
-        if (!state) {
-            return res.status(404).json({ message: 'State not found' });
-        }
-
-        res.json(state);
+        // Return the state records as an array of JSON data
+        return res.json(states);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        console.error(err);
+        return res.status(500).json({ error: 'Server error' });
     }
 });
 
@@ -153,7 +160,7 @@ router.post('/states/:state/admission', async (req, res) => {
 
 
 //update a state
-router.patch('/:state', (req, res) => {
+router.patch('/:states', (req, res) => {
     res.send('Update a state');
 });
 
