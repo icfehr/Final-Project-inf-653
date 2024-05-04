@@ -1,2 +1,5 @@
 node_modules
 .env
+models/import.json
+routes/api/other.js
+.pdf

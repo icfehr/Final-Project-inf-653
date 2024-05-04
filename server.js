@@ -9,6 +9,7 @@ const corsOptions = require('./config/corsOptions');
 const mongoose = require('mongoose');
 const connectDB = require('./config/dbConn');
 const PORT = process.env.PORT || 3500;
+const statesRouter = require('./routes/api/states');
 
 //Connect to mongo DB
 connectDB();
@@ -33,28 +34,28 @@ app.use(express.json());
 //serve static files
 app.use('/', express.static(path.join(__dirname, '/public')));
 
-// routes
-
-app.use('/states', require('./routes/api/states.js'));
 
 
-app.use('/', require('./routes/root.js'));
-
-app.all('*', (req, res) => {
-    res.status(404);
-    if (req.accepts('html')) {
-        res.sendFile(path.join(__dirname, 'views', '404.html'));
-    } else if (req.accepts('json')) {
-        res.json({ "error": "404 Not Found" });
-    } else {
-        res.type('txt').send("404 Not Found");
-    }
-});
 
 
 // If connected listen on port
 mongoose.connection.once('open', () => {
-    console.log('MongoDB Connected');
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+});
+
+// routes
+
+app.use('/states', statesRouter);
+
+app.use('/', require('./routes/root.js'));
+
+
+app.use((req, res) => {
+  res.status(404);
+  if (req.accepts('html')) {
+    res.sendFile(path.join(__dirname, 'views', '404.html'));
+  } else if (req.accepts('json')) {
+    res.json({ error: '404 Not Found' });
+  }
 });
 
