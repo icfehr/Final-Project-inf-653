@@ -1,148 +1,240 @@
-const State = require("../models/stateModel.json");
+const express = require('express');
+const router = express.Router();   // Import the express router
+const State = require('../../models/States'); // Import the State model
 
+/// GET REQUESTS
 //get all states
-const getAllStates = async (req, res) => {
-  let states;
-  try {
-    if (req.query.contig === "true") {
-      states = await State.find({ stateCode: { $nin: ["AK", "HI"] } })
-        .sort({ state: 1 })
-        .exec();
-    } else if (req.query.contig === "false") {
-      states = await State.find({ stateCode: { $in: ["AK", "HI"] } })
-        .sort({ state: 1 })
-        .exec();
-    } else {
-      states = await State.find().sort({ state: 1 }).exec();
+router.get('/states', async (req, res) => {
+    const { contig } = req.query;
+    let statesData = require('../data/states.json'); // load state data from JSON file
+
+    if (contig === 'true') {
+      // Filter for contiguous states
+        statesData = statesData.filter(state => state.contiguous);
+    } else if (contig === 'false') {
+      // Filter for non-contiguous states
+        statesData = statesData.filter(state => !state.contiguous);
     }
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-  if (!states) {
-    res.status(404).json({ message: "Error No states found" });
-  }
-  res.json(states);
-};
+
+    // Attach fun facts from MongoDB
+    for (const state of statesData) {
+        const dbState = await State.findOne({ code: state.code });
+        if (dbState) {
+        state.funfacts = dbState.funfacts;
+        }
+    }
+
+    res.json(statesData);
+});
 
 //get one state
+router.get('/states/:name', async (req, res) => {
+    try {
+        // Find one state record in your MongoDB collection
+        const state = await State.findOne({ name: req.params.name });
 
-const getOneState = async (req, res) => {
-  const state = await State.findOne({ stateCode: req.params.stateCode }).exec();
-  if (!state) {
-    res.status(404).json({ message: "Error No state found" });
-  }
-  res.json(state);
-};
+        // If the state doesn't exist, return a 404 error
+        if (!state) {
+            return res.status(404).json({ error: 'State not found' });
+        }
 
-// Add fun facts to a state
-
-const updateState = async (req, res) => {
-  const state = await State.findOne({ stateCode: req.params.stateCode }).exec();
-  if (!state) {
-    res.status(404).json({ message: "Error No state found" });
-  }
-  if (req.body.funfact && !state.funfacts.includes(req.body.funfact)) {
-    state.funfacts.push(req.body.funfact);
-  }
-  await state.save();
-  res.json(state);
-};
-
-//get all contiguous states (Not AK or HI)
-const getContiguousStates = async (req, res) => {
-  const states = await State.find({ stateCode: { $nin: ["AK", "HI"] } }).exec();
-  if (!states) {
-    res.status(404).json({ message: "Error No states found" });
-  }
-  res.json(states);
-};
-
-//get all non-contiguous states (AK, HI)
-const getNonContiguousStates = async (req, res) => {
-  const states = await State.find({ stateCode: { $in: ["AK", "HI"] } }).exec();
-  if (!states) {
-    res.status(404).json({ message: "Error No states found" });
-  }
-  res.json(states);
-};
-
-
-
-const addFunFacts = async (req, res) => {
-  const stateCode = req.params.state;
-  const funFacts = req.body.funfacts;
-  try {
-    const state = await State.findOne({ stateCode });
-    if (!state) {
-      return res.status(404).json({ error: "State not found" });
+        // Return the state record as JSON data
+        return res.json(state);
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: 'Server error' });
     }
-    if (!Array.isArray(funFacts)) {
-      return res.status(400).json({ error: "Fun facts must be an array" });
-    }
-    state.funFacts.push(...funFacts);
-    await state.save();
-    return res.status(201).json(state);
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Server error" });
-  }
-};
+});
 
-const updateFunFact = async (req, res) => {
-  const stateCode = req.params.state;
-  const { index, funfact } = req.body;
-  try {
-    const state = await State.findOne({ stateCode });
-    if (!state) {
-      return res.status(404).json({ error: "State not found" });
-    }
-    if (!index || !funfact) {
-      return res
-        .status(400)
-        .json({ error: "Index and fun fact are    quired" });
-    }
-    const funFacts = state.funFacts;
-    if (!funFacts[index - 1]) {
-      return res.status(404).json({ error: "Fun fact not found at     dex" });
-    }
-    funFacts[index - 1] = funfact;
-    await state.save();
-    return res.status(200).json(state);
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Server error" });
-  }
-};
+router.get('/states/:state/funfact', async (req, res) => {
+    const { state } = req.params;
+    let stateData = require('../data/states.json').find(s => s.code === state);
 
-const deleteFunFact = async (req, res) => {
-  const stateCode = req.params.state;
-  const { index } = req.body;
-  try {
-    const state = await State.findOne({ stateCode });
-    if (!state) {
-      return res.status(404).json({ error: "State not found" });
+    // Attach fun facts from MongoDB and select a random one
+    if (stateData) {
+        const dbState = await State.findOne({ code: stateData.code });
+        if (dbState && dbState.funfacts.length > 0) {
+            const randomIndex = Math.floor(Math.random() * dbState.funfacts.length);
+            const randomFact = dbState.funfacts[randomIndex];
+            res.json({ funfact: randomFact });
+            return;
+        }
     }
-    const funFacts = state.funFacts.filter((fact, i) => i !== index - 1);
-    if (funFacts.length === state.funFacts.length) {
-      return res.status(404).json({ error: "Fun fact not found at     dex" });
-    }
-    state.funFacts = funFacts;
-    await state.save();
-    return res.status(200).json(state);
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Server error" });
-  }
-};
+    res.status(404).send(`No fun facts found for state '${state}'`);
+});
 
-// Export the functions Get all states, Get one state, Update state, Get contiguous states, Get non-contiguous states, Delete fun fact
-//Unsure if I should change update state to updatefun fact but someone might need to change a website or facebook link or something so I guess it should stay as update state
-module.exports = {
-  getAllStates,
-  getOneState,
-  updateState,
-  addFunFacts,
-  getContiguousStates,
-  getNonContiguousStates,
-  deleteFunFact,
-};
+router.get('/states/:state/capital', (req, res) => {
+    const { state } = req.params;
+    const stateData = require('../data/states.json').find(s => s.code === state);
+    if (stateData) {
+        res.json({ state: stateData.name, capital: stateData.capital });
+    } else {
+        res.status(404).send(`State '${state}' not found`);
+    }
+});
+
+router.get('/states/:state/nickname', (req, res) => {
+    const { state } = req.params;
+    const stateData = require('../data/states.json').find(s => s.code === state);
+    if (stateData) {
+        res.json({ state: stateData.name, nickname: stateData.nickname });
+    } else {
+        res.status(404).send(`State '${state}' not found`);
+    }
+});
+
+
+
+
+
+
+
+//create a new state
+router.post('/', async (req, res) => {
+    const state = new State({
+        name: req.body.name,
+        abbreviation: req.body.abbreviation
+    });
+    res.send('Create a new state');
+});
+
+
+router.post('/states/:state/funfact', async (req, res) => {
+    try {
+        const stateCode = req.params.state;
+        const funFacts = req.body.funfacts;
+    
+        // Verify that funfacts data is provided as an array
+        if (!Array.isArray(funFacts)) {
+            return res.status(400).json({ message: 'Fun facts must be provided as an array' });
+        }
+
+        // Find the requested state in your MongoDB collection
+        let state = await State.findOne({ stateCode });
+
+        if (state) {
+            // If the state already has some fun facts, add the new fun facts to them
+            state.funfacts = [...state.funfacts, ...funFacts];
+        } else {
+            // If the state has no pre-existing fun facts, create a new record in your MongoDB collection
+            state = new State({ stateCode, funfacts: funFacts });
+        }
+
+        // Save the updated funfacts data to your MongoDB collection
+        await state.save();
+    
+        return res.json(state);
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: 'Server error FUNFACT' });
+    }
+});
+
+
+router.post('/states/:state/capital', async (req, res) => {
+    try{
+        const stateCode = req.params.state;
+        const capital = req.body.capital;
+        const state = await State.findOne({ state: stateCode });
+
+        if (!state) {
+            return res.status(404).json({ message: 'State not found' });
+        }
+
+        state.capital = capital;
+        await state.save();
+
+        res.json(state);
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: 'Server error CAPITAL' });
+    }
+});
+
+router.post('/states/:state/nickname', async (req, res) => {
+    try{
+        const stateCode = req.params.state;
+        const nickname = req.body.nickname;
+        const state = await State.findOne({ state: stateCode });
+
+        if (!state) {
+            return res.status(404).json({ message: 'State not found' });
+        }
+        state.nickname = nickname;
+        await state.save();
+        res.json(state);
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: 'Server error NICKNAME' });
+    }
+});
+
+router.post('/states/:state/population', async (req, res) => {
+    try{
+        const stateCode = req.params.state;
+        const population = req.body.population;
+        const state = await State.findOne({ state: stateCode })
+
+        if (!state) {
+            return res.status(404).json({ message: 'State not found' });
+        }
+        state.population = population;
+        await state.save();
+        res.json(state);
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: 'Server error POPULATION' });
+    }
+});
+
+router.post('/states/:state/admission', async (req, res) => {
+    try{
+        const stateCode = req.params.state;
+        const admission = req.body.admission;
+        const state = await State.findOne   ({ state: stateCode });
+
+        if (!state) {
+            return res.status(404).json({ message: 'State not found' });
+        }
+        state.admission = admission;
+        await state.save();
+        res.json(state);
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: 'Server error ADMISSION' });
+    }
+});
+
+
+
+//update a state
+router.patch('/:states', (req, res) => {
+    res.send('Update a state');
+});
+
+//delete a state should be unused
+router.delete('/:id', (req, res) => {
+    res.send('Delete a state');
+});
+
+router.delete('/:state/funfacts/:funfactPosition', async (req, res) => {
+    try {
+        const state = await State.findOne({ stateCode: req.params.state });
+        if (!state) {
+            return res.status(404).json({ message: 'State not found' });
+        }
+        const position = parseInt(req.params.funfactPosition, 10);
+        if (isNaN(position) || position < 0 || position >= state.funfacts.length) {
+            return res.status(400).json({ message: 'Invalid funfact position' });
+        }
+        state.funfacts.splice(position, 1);
+        await state.save();
+        res.json({ message: 'Funfact deleted' });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+
+
+module.exports = router;            // Export the router

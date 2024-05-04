@@ -2,40 +2,88 @@ const express = require('express');
 const router = express.Router();   // Import the express router
 const State = require('../../models/States'); // Import the State model
 
+/// GET REQUESTS
 //get all states
 router.get('/states', async (req, res) => {
-    try {
-        const contig = req.query.contig;
-        let states;
-        if (contig === 'true') {
-            states = await State.find({state: {$nin: ['Alaska', 'Hawaii']}});
-        } else if (contig === 'false') {
-            states = await State.find({state: {$in: ['Alaska', 'Hawaii']}});
-        } else {
-            states = await State.find({});
-        }
-        return res.json(states);
-    } catch (err) {
-        console.error(err);
-        return res.status(500).json({ error: 'Server error' });
+    const { contig } = req.query;
+    let statesData = require('../data/states.json'); // load state data from JSON file
+
+    if (contig === 'true') {
+      // Filter for contiguous states
+        statesData = statesData.filter(state => state.contiguous);
+    } else if (contig === 'false') {
+      // Filter for non-contiguous states
+        statesData = statesData.filter(state => !state.contiguous);
     }
+
+    // Attach fun facts from MongoDB
+    for (const state of statesData) {
+        const dbState = await State.findOne({ code: state.code });
+        if (dbState) {
+        state.funfacts = dbState.funfacts;
+        }
+    }
+
+    res.json(statesData);
 });
-
-
 
 //get one state
-router.get('/states', async (req, res) => {
+router.get('/states/:name', async (req, res) => {
     try {
-        // Find all state records in your MongoDB collection
-        const states = await State.find({});
+        // Find one state record in your MongoDB collection
+        const state = await State.findOne({ name: req.params.name });
 
-        // Return the state records as an array of JSON data
-        return res.json(states);
+        // If the state doesn't exist, return a 404 error
+        if (!state) {
+            return res.status(404).json({ error: 'State not found' });
+        }
+
+        // Return the state record as JSON data
+        return res.json(state);
     } catch (err) {
         console.error(err);
         return res.status(500).json({ error: 'Server error' });
     }
 });
+
+router.get('/states/:state/funfact', async (req, res) => {
+    const { state } = req.params;
+    let stateData = require('../data/states.json').find(s => s.code === state);
+
+    // Attach fun facts from MongoDB and select a random one
+    if (stateData) {
+        const dbState = await State.findOne({ code: stateData.code });
+        if (dbState && dbState.funfacts.length > 0) {
+            const randomIndex = Math.floor(Math.random() * dbState.funfacts.length);
+            const randomFact = dbState.funfacts[randomIndex];
+            res.json({ funfact: randomFact });
+            return;
+        }
+    }
+    res.status(404).send(`No fun facts found for state '${state}'`);
+});
+
+router.get('/states/:state/capital', (req, res) => {
+    const { state } = req.params;
+    const stateData = require('../data/states.json').find(s => s.code === state);
+    if (stateData) {
+        res.json({ state: stateData.name, capital: stateData.capital });
+    } else {
+        res.status(404).send(`State '${state}' not found`);
+    }
+});
+
+router.get('/states/:state/nickname', (req, res) => {
+    const { state } = req.params;
+    const stateData = require('../data/states.json').find(s => s.code === state);
+    if (stateData) {
+        res.json({ state: stateData.name, nickname: stateData.nickname });
+    } else {
+        res.status(404).send(`State '${state}' not found`);
+    }
+});
+
+
 
 
 
@@ -72,7 +120,7 @@ router.post('/states/:state/funfact', async (req, res) => {
             state = new State({ stateCode, funfacts: funFacts });
         }
 
-        // Save the updated state record
+        // Save the updated funfacts data to your MongoDB collection
         await state.save();
     
         return res.json(state);

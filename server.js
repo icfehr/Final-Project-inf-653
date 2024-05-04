@@ -2,6 +2,7 @@
 require('dotenv').config();
 const express = require('express');
 const app = express();
+const router = express.Router();
 const path = require('path');
 const cors = require('cors');
 const corsOptions = require('./config/corsOptions');
@@ -33,9 +34,11 @@ app.use(express.json());
 app.use('/', express.static(path.join(__dirname, '/public')));
 
 // routes
-app.use('/', require('./routes/root.js'));
 
-app.use('/statesData', require('./routes/api/states'));
+app.use('/states', require('./routes/api/states.js'));
+
+
+app.use('/', require('./routes/root.js'));
 
 app.all('*', (req, res) => {
     res.status(404);
@@ -47,7 +50,6 @@ app.all('*', (req, res) => {
         res.type('txt').send("404 Not Found");
     }
 });
-
 
 
 // If connected listen on port
