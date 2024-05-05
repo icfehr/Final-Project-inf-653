@@ -33,40 +33,61 @@ router.get("/", async (req, res) => {
       }
     });
 
-    res.json(mergedData);
+    // Check if the contig query parameter is provided
+    if (req.query.contig !== undefined) {
+      const contig = req.query.contig === 'true';
+      const filteredData = mergedData.filter((state) => {
+        if (contig) {
+          // Exclude AK and HI for contig=true
+          return state.code !== 'AK' && state.code !== 'HI';
+        } else {
+          // Include only AK and HI for contig=false
+          return state.code === 'AK' || state.code === 'HI';
+        }
+      });
+      res.json(filteredData);
+    } else {
+      // If contig is not provided, return the full list
+      res.json(mergedData);
+    }
   } catch (err) {
     console.error(err.message);
     res.status(500).send("Server Error");
   }
 });
 
-// GET ONE
-router.get("/states/:name", async (req, res) => {
-  const { name } = req.params;
 
+// GET ONE
+router.get("/:state", async (req, res) => {
   try {
+    // ensure that nY and Ny can be read as NY as the state code
+    const stateCode = req.params.state.toUpperCase();
+
     // Read the JSON file
     const data = fs.readFileSync(
       path.join(__dirname, "../../models/statesData.json")
     );
+
+    // Parse data
     const statesData = JSON.parse(data);
 
-    // Find the state in the JSON data
-    const stateData = statesData.find((state) => state.code === name);
+    // Find the corresponding state in the JSON data
+    const stateData = statesData.find(state => state.code === stateCode);
 
-    // If the state doesn't exist in the JSON data, return an error
+    // for passing test
     if (!stateData) {
-      return res.status(404).json({ error: "State not found" });
+      return res.status(404).json({ message: 'Invalid state abbreviation parameter' });
     }
 
-    // Get the state data from MongoDB
-    const stateFromDB = await State.findOne({ stateCode: name });
+    // Get the data from MongoDB where the abbreviation is keyed as stateCode
+    const stateFromDB = await State.findOne({ stateCode: stateCode });
 
-    // If the state exists in the MongoDB data, merge the fun facts
-    if (stateFromDB) {
+    // Merge the data from both databases
+    if (stateFromDB && stateFromDB.funfacts) {
       stateData.funfacts = stateFromDB.funfacts;
     }
 
+    // present the data as a json object
     res.json(stateData);
   } catch (err) {
     console.error(err.message);
@@ -74,12 +95,162 @@ router.get("/states/:name", async (req, res) => {
   }
 });
 
-///POST REQUESTS
-// @route   POST /states/:state/funfact
-// @desc    Add fun fact to a state
+
+// GET FUNFACTS
+router.get("/:state/funfact", async (req, res) => {
+  try {
+    // ensure that nY and Ny can be read as NY as the state code
+    const stateCode = req.params.state.toUpperCase();
+
+    // Read the JSON file
+    const data = fs.readFileSync(
+      path.join(__dirname, "../../models/statesData.json")
+    );
+
+    // Parse data
+    const statesData = JSON.parse(data);
+
+    // Find the corresponding state in the JSON data
+    const stateData = statesData.find(state => state.code === stateCode);
+
+    // If the state is not found in the JSON data, return an error message
+    if (!stateData) {
+      return res.status(404).json({ message: 'Invalid state abbreviation parameter' });
+    }
+
+    // Get the data from MongoDB where the abbreviation is keyed as stateCode
+    const stateFromDB = await State.findOne({ stateCode: stateCode.toUpperCase() });
+
+    // If the state is not found in the MongoDB or it doesn't have a funfact, return an error message
+    if (!stateFromDB || !stateFromDB.funfacts || stateFromDB.funfacts.length === 0) {
+      return res.status(404).json({ message: `No Fun Facts found for ${stateData.state}` });
+    }
+
+    // Return the funfacts as a json object
+    res.json({ funfacts: stateFromDB.funfacts });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server Error");
+  }
+});
+
+// Get CAPITAL
+
+router.get("/:state/capital", async (req, res) => {
+  try {
+    // ensure that nY and Ny can be read as NY as the state code
+    const stateCode = req.params.state.toUpperCase();
+
+    // Read the JSON file
+    const data = fs.readFileSync(
+      path.join(__dirname, "../../models/statesData.json")
+    );
+
+    // Parse data
+    const statesData = JSON.parse(data);
+
+    // Find the corresponding state in the JSON data
+    const stateData = statesData.find(state => state.code === stateCode);
+
+    // If the state is not found in the JSON data, return an error message
+    if (!stateData) {
+      return res.status(404).json({ message: 'Invalid state abbreviation parameter' });
+    }
+
+    // Get the data from MongoDB where the abbreviation is keyed as stateCode
+    const stateFromDB = await State.findOne({ stateCode: stateCode });
+
+    // If the state is not found in the MongoDB, return an error message
+    if (!stateFromDB) {
+      return res.status(404).json({ message: `No data found for ${stateData.state}` });
+    }
+
+    // Return the state and capital as a json object
+    res.json({ state: stateData.state, capital: stateData.capital_city });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server Error");
+  }
+});
+
+
+
+//nickname
+router.get("/:state/nickname", async (req, res) => {
+  try {
+    const stateCode = req.params.state.toUpperCase();
+    const data = fs.readFileSync(path.join(__dirname, "../../models/statesData.json"));
+    const statesData = JSON.parse(data);
+    const stateData = statesData.find(state => state.code === stateCode);
+
+    if (!stateData) {
+      return res.status(404).json({ message: 'Invalid state abbreviation parameter' });
+    }
+
+    res.json({ state: stateData.state, nickname: stateData.nickname });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server Error");
+  }
+});
+
+//population
+router.get("/:state/population", async (req, res) => {
+  try {
+    const stateCode = req.params.state.toUpperCase();
+    const data = fs.readFileSync(path.join(__dirname, "../../models/statesData.json"));
+    const statesData = JSON.parse(data);
+    const stateData = statesData.find(state => state.code === stateCode);
+
+    if (!stateData) {
+      return res.status(404).json({ message: 'Invalid state abbreviation parameter' });
+    }
+
+    res.json({ state: stateData.state, population: stateData.population.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server Error");
+  }
+});
+
+
+//admission
+router.get("/:state/admission", async (req, res) => {
+  try {
+    const stateCode = req.params.state.toUpperCase();
+    const data = fs.readFileSync(path.join(__dirname, "../../models/statesData.json"));
+    const statesData = JSON.parse(data);
+    const stateData = statesData.find(state => state.code === stateCode);
+
+    if (!stateData) {
+      return res.status(404).json({ message: 'Invalid state abbreviation parameter' });
+    }
+
+    res.json({ state: stateData.state, admitted: stateData.admission_date });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server Error");
+  }
+});
+
+
+
+
+///// POST REQUEST
+//funfacts post update
 router.post("/:state/funfact", async (req, res) => {
   const { state } = req.params;
-  const { funfact } = req.body;
+  const { funfacts } = req.body;
+
+  // Check if funfacts is provided
+  if (funfacts === undefined) {
+    return res.status(400).json({ message: 'State fun facts value required' });
+  }
+
+  // Check if funfacts is an array
+  if (!Array.isArray(funfacts)) {
+    return res.status(400).json({ message: 'State fun facts value must be an array' });
+  }
 
   try {
     // Find the state in the database
@@ -89,11 +260,11 @@ router.post("/:state/funfact", async (req, res) => {
     if (!stateData) {
       stateData = new State({
         stateCode: state,
-        funfacts: [funfact],
+        funfacts: funfacts,
       });
     } else {
-      // If the state exists, add the new fun fact
-      stateData.funfacts.push(funfact);
+      // If the state exists, add the new fun facts
+      stateData.funfacts = [...stateData.funfacts, ...funfacts];
     }
 
     // Save the state data
@@ -106,75 +277,133 @@ router.post("/:state/funfact", async (req, res) => {
   }
 });
 
-// @route   PATCH /states/:state/funfact
-// @desc    Update a fun fact of a state
+
+
+
+
+
+
+
+
+
+//PATCH REQUEST
+
 router.patch("/:state/funfact", async (req, res) => {
   const { state } = req.params;
   const { index, funfact } = req.body;
 
+  // Check if index and funfact are provided
+  if (index === undefined) {
+    return res.status(400).json({ message: 'State fun fact index value required' });
+  }
+  if (!funfact || typeof funfact !== 'string') {
+    return res.status(400).json({ message: 'State fun fact value required' });
+  }
+
   try {
-    // Find the state in the database
-    let stateData = await State.findOne({ stateCode: state });
+    // ensure that nY and Ny can be read as NY as the state code
+    const stateCode = state.toUpperCase();
 
-    // If the state doesn't exist, return an error
+    // Read the JSON file
+    const data = fs.readFileSync(
+      path.join(__dirname, "../../models/statesData.json")
+    );
+
+    // Parse data
+    const statesData = JSON.parse(data);
+
+    // Find the corresponding state in the JSON data
+    const stateData = statesData.find(state => state.code === stateCode);
+
+    // If the state is not found in the JSON data, return an error message
     if (!stateData) {
-      return res.status(404).json({ error: "State not found" });
+      return res.status(404).json({ message: 'Invalid state abbreviation parameter' });
     }
 
-    // If the index is not provided or is not a number, return an error
-    if (!index || typeof index !== "number") {
-      return res.status(400).json({ error: "Invalid index" });
+    // Find the state in the database
+    let stateFromDB = await State.findOne({ stateCode: stateCode });
+
+    // If the state doesn't exist or it doesn't have funfacts, return an error message
+    if (!stateFromDB || !stateFromDB.funfacts || stateFromDB.funfacts.length === 0) {
+      return res.status(404).json({ message: `No Fun Facts found for ${stateData.state}` });
     }
 
-    // If the fun fact is not provided or is not a string, return an error
-    if (!funfact || typeof funfact !== "string") {
-      return res.status(400).json({ error: "Invalid fun fact" });
+    // If no fun fact exists at the provided index, return an error message
+    if (!stateFromDB.funfacts[index - 1]) {
+      return res.status(404).json({ message: `No Fun Fact found at that index for ${stateData.state}` });
     }
 
-    // Update the fun fact
-    stateData.funfacts[index - 1] = funfact;
+    // Update the fun fact at the provided index
+    stateFromDB.funfacts[index - 1] = funfact;
 
     // Save the state data
-    await stateData.save();
+    await stateFromDB.save();
 
-    res.json(stateData);
+    res.json(stateFromDB);
   } catch (err) {
     console.error(err.message);
     res.status(500).send("Server Error");
   }
 });
 
-// @route   DELETE /states/:state/funfact
-// @desc    Delete a fun fact of a state
+
+// DELETE
+// Delete funfact of a state
 router.delete("/:state/funfact", async (req, res) => {
   const { state } = req.params;
   const { index } = req.body;
 
+  // Check if index is provided
+  if (index === undefined) {
+    return res.status(400).json({ message: 'State fun fact index value required' });
+  }
+
   try {
-    // Find the state in the database
-    let stateData = await State.findOne({ stateCode: state });
+    // ensure that nY and Ny can be read as NY as the state code
+    const stateCode = state.toUpperCase();
 
-    // If the state doesn't exist, return an error
+    // Read the JSON file
+    const data = fs.readFileSync(
+      path.join(__dirname, "../../models/statesData.json")
+    );
+
+    // Parse data
+    const statesData = JSON.parse(data);
+
+    // Find the corresponding state in the JSON data
+    const stateData = statesData.find(state => state.code === stateCode);
+
+    // If the state is not found in the JSON data, return an error message
     if (!stateData) {
-      return res.status(404).json({ error: "State not found" });
+      return res.status(404).json({ message: 'Invalid state abbreviation parameter' });
     }
 
-    // If the index is not provided or is not a number, return an error
-    if (!index || typeof index !== "number") {
-      return res.status(400).json({ error: "Invalid index" });
+    // Find the state in the database
+    let stateFromDB = await State.findOne({ stateCode: stateCode });
+
+    // If the state doesn't exist or it doesn't have funfacts, return an error message
+    if (!stateFromDB || !stateFromDB.funfacts || stateFromDB.funfacts.length === 0) {
+      return res.status(404).json({ message: `No Fun Facts found for ${stateData.state}` });
     }
 
-    // Delete the fun fact
-    stateData.funfacts.splice(index - 1, 1);
+    // If no fun fact exists at the provided index, return an error message
+    if (!stateFromDB.funfacts[index - 1]) {
+      return res.status(404).json({ message: `No Fun Fact found at that index for ${stateData.state}` });
+    }
+
+    // Delete the fun fact at the provided index
+    stateFromDB.funfacts.splice(index - 1, 1);
 
     // Save the state data
-    await stateData.save();
+    await stateFromDB.save();
 
-    res.json(stateData);
+    res.json(stateFromDB);
   } catch (err) {
     console.error(err.message);
     res.status(500).send("Server Error");
   }
 });
+
+
 
 module.exports = router;
